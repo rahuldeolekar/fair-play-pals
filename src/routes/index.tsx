@@ -11,7 +11,12 @@ import {
   type Match,
   type Player,
 } from "@/lib/shuttle-logic";
-import { getAppState, updateAppState } from "@/lib/shuttle.functions";
+import {
+  getAppState,
+  updateAppState,
+  verifyAdminPassword,
+  updateAdminPassword,
+} from "@/lib/shuttle.functions";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -91,17 +96,20 @@ function TierDot({ t }: { t: number }) {
 function ShuttleScoreApp() {
   const fetchState = useServerFn(getAppState);
   const writeState = useServerFn(updateAppState);
+  const verifyPw = useServerFn(verifyAdminPassword);
+  const changePw = useServerFn(updateAdminPassword);
 
   const [state, setState] = useState<AppState | null>(null);
   const [nav, setNav] = useState<"board" | "courts" | "history" | "admin">("board");
   const [toast, setToast] = useState<string | null>(null);
   const [online, setOnline] = useState(false);
 
-  // Admin: password cached in localStorage so the device stays unlocked.
-  const [adminPw, setAdminPw] = useState<string>(() =>
-    typeof window === "undefined" ? "" : localStorage.getItem("ss_admin_pw") || "",
+  // Admin: HMAC-signed session token (opaque to the client) cached in localStorage.
+  // The password itself is never stored or compared on the client.
+  const [adminToken, setAdminToken] = useState<string>(() =>
+    typeof window === "undefined" ? "" : localStorage.getItem("ss_admin_token") || "",
   );
-  const isAdmin = !!adminPw && !!state && adminPw === state.password;
+  const isAdmin = !!adminToken && !!state;
 
   const toastTimer = useRef<number | null>(null);
   const showToast = (msg: string) => {
@@ -158,22 +166,26 @@ function ShuttleScoreApp() {
   // ─────────────────────────────────────────────
   const commit = async (patch: Partial<AppState>, opts: { silent?: boolean } = {}) => {
     if (!state) return;
-    if (!adminPw) {
+    if (!adminToken) {
       showToast("🔐 Admin login required");
       return;
     }
     try {
-      // Apply day rollover at write time too so gamesToday resets cleanly.
       const merged = rolloverDayIfNeeded({ ...state, ...patch } as AppState);
       const finalPatch: Partial<AppState> = {
         ...patch,
         dayKey: merged.dayKey,
         players: patch.players ?? merged.players,
       };
-      await writeState({ data: { password: adminPw, patch: finalPatch } });
+      await writeState({ data: { token: adminToken, patch: finalPatch } });
       if (!opts.silent) showToast("✅ Saved");
     } catch (e: any) {
-      showToast("⚠ " + (e?.message || "Save failed"));
+      const msg = e?.message || "Save failed";
+      showToast("⚠ " + msg);
+      if (/session expired|sign in/i.test(msg)) {
+        localStorage.removeItem("ss_admin_token");
+        setAdminToken("");
+      }
     }
   };
 
@@ -204,20 +216,27 @@ function ShuttleScoreApp() {
           <AdminView
             state={state}
             isAdmin={isAdmin}
-            adminPw={adminPw}
-            onLogin={(pw) => {
-              if (pw === state.password) {
-                localStorage.setItem("ss_admin_pw", pw);
-                setAdminPw(pw);
+            onLogin={async (pw) => {
+              try {
+                const { token } = await verifyPw({ data: { password: pw } });
+                localStorage.setItem("ss_admin_token", token);
+                setAdminToken(token);
                 showToast("🔓 Admin unlocked");
-              } else {
-                showToast("⚠ Incorrect password");
+              } catch (e: any) {
+                showToast("⚠ " + (e?.message || "Login failed"));
               }
             }}
             onLogout={() => {
-              localStorage.removeItem("ss_admin_pw");
-              setAdminPw("");
+              localStorage.removeItem("ss_admin_token");
+              setAdminToken("");
               showToast("Locked");
+            }}
+            onChangePassword={async (newPw) => {
+              const { token } = await changePw({
+                data: { token: adminToken, newPassword: newPw },
+              });
+              localStorage.setItem("ss_admin_token", token);
+              setAdminToken(token);
             }}
             commit={commit}
             showToast={showToast}
