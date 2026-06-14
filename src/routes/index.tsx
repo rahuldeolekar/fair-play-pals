@@ -1235,7 +1235,7 @@ function AdminPanel({
       <div className="sec-label">Tools</div>
       <div style={{ margin: "0 16px", display: "flex", gap: 8, flexWrap: "wrap" }}>
         <ExportButtons state={state} showToast={showToast} />
-        <ChangePasswordButton commit={commit} showToast={showToast} />
+        <ChangePasswordButton onChangePassword={onChangePassword} showToast={showToast} />
         <button onClick={resetStats} className="btn btn-red btn-sm">
           ⚠ Reset All Stats
         </button>
