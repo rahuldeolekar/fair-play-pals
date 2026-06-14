@@ -1462,15 +1462,16 @@ function ExportButtons({
 }
 
 function ChangePasswordButton({
-  commit,
+  onChangePassword,
   showToast,
 }: {
-  commit: CommitFn;
+  onChangePassword: (newPw: string) => Promise<void>;
   showToast: (msg: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [pw1, setPw1] = useState("");
   const [pw2, setPw2] = useState("");
+  const [saving, setSaving] = useState(false);
   return (
     <>
       <button onClick={() => setOpen((o) => !o)} className="btn btn-outline btn-sm">
@@ -1496,19 +1497,26 @@ function ChangePasswordButton({
           />
           <button
             className="btn btn-gold btn-sm"
+            disabled={saving}
             onClick={async () => {
               if (!pw1) return showToast("Enter a password.");
+              if (pw1.length < 4) return showToast("Password must be 4+ chars.");
               if (pw1 !== pw2) return showToast("Passwords do not match.");
-              await commit({ password: pw1 });
-              localStorage.setItem("ss_admin_pw", pw1);
-              showToast("🔑 Password updated — log in again");
-              setOpen(false);
-              setPw1("");
-              setPw2("");
-              window.location.reload();
+              setSaving(true);
+              try {
+                await onChangePassword(pw1);
+                showToast("🔑 Password updated — notification emailed");
+                setOpen(false);
+                setPw1("");
+                setPw2("");
+              } catch (e: any) {
+                showToast("⚠ " + (e?.message || "Update failed"));
+              } finally {
+                setSaving(false);
+              }
             }}
           >
-            Save
+            {saving ? "…" : "Save"}
           </button>
         </div>
       )}
