@@ -885,17 +885,17 @@ type CommitFn = (patch: Partial<AppState>, opts?: { silent?: boolean }) => Promi
 function AdminView({
   state,
   isAdmin,
-  adminPw,
   onLogin,
   onLogout,
+  onChangePassword,
   commit,
   showToast,
 }: {
   state: AppState;
   isAdmin: boolean;
-  adminPw: string;
   onLogin: (pw: string) => void;
   onLogout: () => void;
+  onChangePassword: (newPw: string) => Promise<void>;
   commit: CommitFn;
   showToast: (msg: string) => void;
 }) {
@@ -910,7 +910,7 @@ function AdminView({
             Admin Access
           </div>
           <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 4 }}>
-            Default password: badminton123
+            Enter the admin password to manage the club.
           </div>
         </div>
         <input
@@ -937,9 +937,9 @@ function AdminView({
   return (
     <AdminPanel
       state={state}
-      adminPw={adminPw}
       commit={commit}
       onLogout={onLogout}
+      onChangePassword={onChangePassword}
       showToast={showToast}
     />
   );
