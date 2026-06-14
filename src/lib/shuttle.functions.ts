@@ -78,15 +78,11 @@ export const verifyAdminPassword = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: row, error } = await supabaseAdmin
-      .from("admin_config")
-      .select("password")
-      .eq("id", 1)
-      .single();
+    const { data: ok, error } = await supabaseAdmin.rpc("verify_admin_password", {
+      p_password: data.password,
+    });
     if (error) throw new Error("Server error");
-    if ((row?.password ?? "") !== data.password) {
-      throw new Error("Incorrect admin password.");
-    }
+    if (!ok) throw new Error("Incorrect admin password.");
     return { token: await mintToken() };
   });
 
