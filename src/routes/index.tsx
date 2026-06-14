@@ -947,15 +947,15 @@ function AdminView({
 
 function AdminPanel({
   state,
-  adminPw: _adminPw,
   commit,
   onLogout,
+  onChangePassword,
   showToast,
 }: {
   state: AppState;
-  adminPw: string;
   commit: CommitFn;
   onLogout: () => void;
+  onChangePassword: (newPw: string) => Promise<void>;
   showToast: (msg: string) => void;
 }) {
   const present = state.players.filter((p) => p.present);
