@@ -37,7 +37,6 @@ export type AppState = {
   currentMatches: Match[];
   customLocked: { teamA: number[]; teamB: number[]; type: string; poolLabel?: string } | null;
   mode: "normal" | "tournament";
-  password: string;
   nextId: number;
   courts: number;
   matchTarget: number;
