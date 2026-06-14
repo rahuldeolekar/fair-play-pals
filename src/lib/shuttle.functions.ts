@@ -20,7 +20,7 @@ export const getAppState = createServerFn({ method: "GET" }).handler(async () =>
 // immediately and we never trust the client's copy of `state.password`.
 const writeSchema = z.object({
   password: z.string().min(1).max(200),
-  patch: z.record(z.string(), z.unknown()), // partial AppState
+  patch: z.record(z.unknown()), // partial AppState
 });
 
 export const updateAppState = createServerFn({ method: "POST" })
