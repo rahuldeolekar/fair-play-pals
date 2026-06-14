@@ -91,6 +91,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
+      { property: "og:title", content: "ShuttleScore · Club Tracker" },
+      { name: "twitter:title", content: "ShuttleScore · Club Tracker" },
+      { name: "description", content: "Match Maker Pro creates balanced sports teams and manages player rotations for multiple courts." },
+      { property: "og:description", content: "Match Maker Pro creates balanced sports teams and manages player rotations for multiple courts." },
+      { name: "twitter:description", content: "Match Maker Pro creates balanced sports teams and manages player rotations for multiple courts." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/8d291865-f78a-4d0d-84de-0296a75acf1e/id-preview-9e593092--c43ebffa-b017-433c-97c7-4f972e3728c8.lovable.app-1781464546949.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/8d291865-f78a-4d0d-84de-0296a75acf1e/id-preview-9e593092--c43ebffa-b017-433c-97c7-4f972e3728c8.lovable.app-1781464546949.png" },
     ],
     links: [
       {
