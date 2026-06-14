@@ -14,6 +14,24 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_config: {
+        Row: {
+          id: number
+          password: string
+          updated_at: string
+        }
+        Insert: {
+          id?: number
+          password: string
+          updated_at?: string
+        }
+        Update: {
+          id?: number
+          password?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       app_state: {
         Row: {
           data: Json
