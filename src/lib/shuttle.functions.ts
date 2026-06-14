@@ -177,10 +177,9 @@ export const updateAdminPassword = createServerFn({ method: "POST" })
       throw new Error("Session expired. Please sign in again.");
     }
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin
-      .from("admin_config")
-      .update({ password: data.newPassword, updated_at: new Date().toISOString() })
-      .eq("id", 1);
+    const { error } = await supabaseAdmin.rpc("set_admin_password", {
+      p_password: data.newPassword,
+    });
     if (error) throw new Error(error.message);
 
     // Fire-and-forget email (don't fail the request if email fails).
