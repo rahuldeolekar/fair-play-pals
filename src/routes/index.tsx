@@ -606,7 +606,15 @@ function StatCard({
 // ─────────────────────────────────────────────
 // Courts view
 // ─────────────────────────────────────────────
-function CourtsView({ state }: { state: AppState }) {
+function CourtsView({
+  state,
+  isAdmin,
+  onEdit,
+}: {
+  state: AppState;
+  isAdmin: boolean;
+  onEdit: (mid: number | string, sA: number, sB: number) => void;
+}) {
   const byId = (id: number) => state.players.find((p) => p.id === id);
   const courts = state.courts || 2;
 
