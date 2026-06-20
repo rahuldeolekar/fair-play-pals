@@ -7,9 +7,15 @@ import {
   generateBalancedMatches,
   rolloverDayIfNeeded,
   todayKey,
+  generateTournamentFixtures,
+  calculateTournamentTable,
+  buildKnockoutFixtures,
   type AppState,
   type Match,
   type Player,
+  type TournamentState,
+  type TournamentFixture,
+  type TournamentStanding,
 } from "@/lib/shuttle-logic";
 import {
   getAppState,
