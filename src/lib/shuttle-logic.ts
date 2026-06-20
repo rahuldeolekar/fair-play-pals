@@ -344,3 +344,61 @@ export function buildKnockoutFixtures(
     ],
   };
 }
+
+// Build balanced doubles teams for a tournament with TRUE randomness.
+// Strategy:
+//  - Sort players by rating descending.
+//  - Split into TOP half and BOTTOM half.
+//  - Shuffle each half independently.
+//  - Pair top[i] with bottom[i] → every team has one stronger + one weaker
+//    player, but the SPECIFIC partners vary every call.
+// Requires an even number of players.
+export function buildBalancedTournamentTeams(players: Player[]): TournamentTeam[] {
+  if (players.length < 4 || players.length % 2 !== 0) return [];
+  const byRating = [...players].sort((a, b) => b.rating - a.rating);
+  const half = byRating.length / 2;
+  const top = shuffle(byRating.slice(0, half));
+  const bot = shuffle(byRating.slice(half));
+  const teams: TournamentTeam[] = [];
+  for (let i = 0; i < half; i++) {
+    const a = top[i];
+    const b = bot[i];
+    teams.push({
+      id: `T${i + 1}-${Math.random().toString(36).slice(2, 7)}`,
+      name: `${a.name.split(" ")[0]} & ${b.name.split(" ")[0]}`,
+      players: [a.id, b.id],
+    });
+  }
+  return shuffle(teams).map((t, i) => ({ ...t, id: `T${i + 1}` }));
+}
+
+// Apply a completed match result to player stats (used by both Normal & Tournament).
+export function applyMatchToPlayers(
+  players: Player[],
+  teamA: number[],
+  teamB: number[],
+  scoreA: number,
+  scoreB: number,
+): Player[] {
+  const setA = new Set(teamA);
+  const setB = new Set(teamB);
+  return players.map((p) => {
+    if (setA.has(p.id)) {
+      return {
+        ...p,
+        gamesPlayed: (p.gamesPlayed || 0) + 1,
+        totalFor: (p.totalFor || 0) + scoreA,
+        totalAgainst: (p.totalAgainst || 0) + scoreB,
+      };
+    }
+    if (setB.has(p.id)) {
+      return {
+        ...p,
+        gamesPlayed: (p.gamesPlayed || 0) + 1,
+        totalFor: (p.totalFor || 0) + scoreB,
+        totalAgainst: (p.totalAgainst || 0) + scoreA,
+      };
+    }
+    return p;
+  });
+}
