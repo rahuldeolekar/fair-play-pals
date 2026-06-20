@@ -2429,6 +2429,7 @@ function TournamentView({
             isAdmin={isAdmin}
             target={state.matchTarget || 21}
             onSubmit={submitFixtureScore}
+            onEdit={editFixtureScore}
           />
         ))}
       </div>
