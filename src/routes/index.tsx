@@ -450,8 +450,9 @@ function Leaderboard({ state, present }: { state: AppState; present: Player[] })
           ranked.map((p, i) => {
             const r = i + 1;
             const rc = r <= 3 ? `r${r}` : "";
-            const av = api(p);
+            const av = rankingScore(p);
             const bw = Math.min(100, (Math.abs(av) / maxA) * 100);
+
             const streak = getStreak(p.id, state.matches);
             return (
               <div key={p.id} className="rank-row">
