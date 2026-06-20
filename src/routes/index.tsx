@@ -1075,6 +1075,46 @@ function AdminPanel({
     commit({ currentMatches, matches, players });
   };
 
+  const editScore = (mid: number | string, sA: number, sB: number) => {
+    const target = state.matchTarget || 21;
+    const cap = target === 21 ? 30 : 20;
+    if (isNaN(sA) || isNaN(sB) || sA < 0 || sB < 0) return showToast("⚠ Enter valid scores.");
+    if (sA === sB) return showToast("⚠ Scores cannot be equal.");
+    if (sA > cap || sB > cap) return showToast(`⚠ Max score is ${cap}.`);
+    const winner = Math.max(sA, sB);
+    const loser = Math.min(sA, sB);
+    if (winner < target) return showToast(`⚠ Winning score must be at least ${target}.`);
+    if (loser >= target - 1 && winner - loser < 2)
+      return showToast(`⚠ At deuce, you need a 2-point lead (up to ${cap}).`);
+
+    const histIdx = state.matches.findIndex((m) => m.id === mid);
+    const curIdx = state.currentMatches.findIndex((m) => m.id === mid);
+    const prev =
+      histIdx >= 0 ? state.matches[histIdx] : curIdx >= 0 ? state.currentMatches[curIdx] : null;
+    if (!prev || !prev.submitted) return showToast("⚠ Match not found.");
+    if (prev.scoreA === sA && prev.scoreB === sB) return;
+
+    let players = revertMatchFromPlayers(
+      state.players,
+      prev.teamA,
+      prev.teamB,
+      prev.scoreA ?? 0,
+      prev.scoreB ?? 0,
+    );
+    players = applyMatchToPlayers(players, prev.teamA, prev.teamB, sA, sB);
+
+    const updated: Match = { ...prev, scoreA: sA, scoreB: sB, date: new Date().toISOString() };
+    const matches =
+      histIdx >= 0 ? state.matches.map((m, i) => (i === histIdx ? updated : m)) : state.matches;
+    const currentMatches =
+      curIdx >= 0
+        ? state.currentMatches.map((m, i) => (i === curIdx ? updated : m))
+        : state.currentMatches;
+
+    commit({ matches, currentMatches, players });
+    showToast("✓ Score updated");
+  };
+
   const addPlayer = (name: string, tier: 0 | 1 | 2, rating: number) => {
     if (!name.trim()) return showToast("⚠ Enter a name.");
     const player: Player = {
