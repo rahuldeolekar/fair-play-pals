@@ -106,7 +106,7 @@ function ShuttleScoreApp() {
   const changePw = useServerFn(updateAdminPassword);
 
   const [state, setState] = useState<AppState | null>(null);
-  const [nav, setNav] = useState<"board" | "courts" | "history" | "admin">("board");
+  const [nav, setNav] = useState<"board" | "courts" | "tournament" | "history" | "admin">("board");
   const [toast, setToast] = useState<string | null>(null);
   const [online, setOnline] = useState(false);
 
