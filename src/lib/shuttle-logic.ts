@@ -402,3 +402,34 @@ export function applyMatchToPlayers(
     return p;
   });
 }
+
+// Reverse a previously-applied match result. Used when editing/correcting a submitted score.
+export function revertMatchFromPlayers(
+  players: Player[],
+  teamA: number[],
+  teamB: number[],
+  scoreA: number,
+  scoreB: number,
+): Player[] {
+  const setA = new Set(teamA);
+  const setB = new Set(teamB);
+  return players.map((p) => {
+    if (setA.has(p.id)) {
+      return {
+        ...p,
+        gamesPlayed: Math.max((p.gamesPlayed || 0) - 1, 0),
+        totalFor: Math.max((p.totalFor || 0) - scoreA, 0),
+        totalAgainst: Math.max((p.totalAgainst || 0) - scoreB, 0),
+      };
+    }
+    if (setB.has(p.id)) {
+      return {
+        ...p,
+        gamesPlayed: Math.max((p.gamesPlayed || 0) - 1, 0),
+        totalFor: Math.max((p.totalFor || 0) - scoreB, 0),
+        totalAgainst: Math.max((p.totalAgainst || 0) - scoreA, 0),
+      };
+    }
+    return p;
+  });
+}
