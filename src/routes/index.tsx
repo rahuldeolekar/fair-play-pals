@@ -1755,19 +1755,13 @@ function CreateTournamentButton({
       return;
     }
     if (state.tournament?.active) {
-      if (!confirm("A tournament is already active. Replace it?")) return;
+      if (!confirm("A tournament is already active. Re-roll a new randomised draw?")) return;
     }
-    // Pair players by rating: highest with lowest, etc. (snake pairing)
-    const sorted = [...present].sort((a, b) => b.rating - a.rating);
-    const teams: TournamentState["teams"] = [];
-    for (let i = 0; i < sorted.length / 2; i++) {
-      const top = sorted[i];
-      const bot = sorted[sorted.length - 1 - i];
-      teams.push({
-        id: `T${i + 1}`,
-        name: `${top.name.split(" ")[0]} & ${bot.name.split(" ")[0]}`,
-        players: [top.id, bot.id],
-      });
+    // Randomised balanced pairing (top half × bottom half, both shuffled).
+    const teams = buildBalancedTournamentTeams(present);
+    if (!teams.length) {
+      showToast("⚠ Could not build teams.");
+      return;
     }
     const fixtures = generateTournamentFixtures(teams);
     const tournament: TournamentState = {
@@ -1781,10 +1775,236 @@ function CreateTournamentButton({
   };
   return (
     <button className="btn btn-gold" style={{ width: "100%" }} onClick={onClick}>
-      🥇 Create Tournament From Present Players ({present.length})
+      🎲 Auto-Draw Tournament ({present.length} present)
     </button>
   );
 }
+
+// ─────────────────────────────────────────────
+// Tournament: Custom team builder (manual pairing)
+// ─────────────────────────────────────────────
+function CustomTournamentBuilder({
+  state,
+  commit,
+  showToast,
+}: {
+  state: AppState;
+  commit: CommitFn;
+  showToast: (msg: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const present = state.players.filter((p) => p.present);
+  // teamOf[playerId] = teamIndex (0-based) or undefined = unassigned
+  const [teamOf, setTeamOf] = useState<Record<number, number | undefined>>({});
+
+  const numTeams = Math.max(2, Math.floor(present.length / 2));
+  const teamBuckets: number[][] = Array.from({ length: numTeams }, () => []);
+  for (const p of present) {
+    const t = teamOf[p.id];
+    if (t != null && t < numTeams) teamBuckets[t].push(p.id);
+  }
+  const unassigned = present.filter((p) => teamOf[p.id] == null);
+
+  const playerName = (id: number) =>
+    state.players.find((x) => x.id === id)?.name.split(" ")[0] || `#${id}`;
+
+  const assign = (pid: number, t: number | undefined) =>
+    setTeamOf((m) => ({ ...m, [pid]: t }));
+
+  const autoFill = () => {
+    // Fill any unassigned players into smallest-team-first slots.
+    const map = { ...teamOf };
+    const buckets = teamBuckets.map((b) => [...b]);
+    for (const p of unassigned) {
+      let target = 0;
+      for (let i = 1; i < buckets.length; i++) {
+        if (buckets[i].length < buckets[target].length) target = i;
+      }
+      buckets[target].push(p.id);
+      map[p.id] = target;
+    }
+    setTeamOf(map);
+  };
+
+  const start = () => {
+    // Validation: each team must have exactly 2 players; no leftovers.
+    if (Object.keys(teamOf).length < present.length) {
+      showToast("⚠ Assign every present player to a team first.");
+      return;
+    }
+    const teams: TournamentTeam[] = [];
+    for (let i = 0; i < numTeams; i++) {
+      const ids = teamBuckets[i];
+      if (ids.length !== 2) {
+        showToast(`⚠ Team ${i + 1} must have exactly 2 players.`);
+        return;
+      }
+      teams.push({
+        id: `T${i + 1}`,
+        name: ids.map(playerName).join(" & "),
+        players: ids,
+      });
+    }
+    if (teams.length < 2) {
+      showToast("⚠ Need at least 2 teams.");
+      return;
+    }
+    if (state.tournament?.active) {
+      if (!confirm("Replace the active tournament with this custom draw?")) return;
+    }
+    const fixtures = generateTournamentFixtures(teams);
+    commit({
+      tournament: { active: true, stage: "league", teams, fixtures },
+      mode: "tournament",
+    });
+    showToast(`🥇 Custom tournament started · ${teams.length} teams`);
+    setOpen(false);
+    setTeamOf({});
+  };
+
+  if (!open) {
+    return (
+      <button
+        className="btn btn-outline"
+        style={{ width: "100%" }}
+        onClick={() => setOpen(true)}
+        disabled={present.length < 4}
+      >
+        🛠 Build Custom Teams ({present.length} present)
+      </button>
+    );
+  }
+
+  return (
+    <div className="card" style={{ padding: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ color: "white", fontWeight: 700, fontSize: 14 }}>
+          🛠 Custom Teams · {numTeams} teams of 2
+        </div>
+        <button className="btn btn-outline btn-sm" onClick={() => setOpen(false)}>
+          Close
+        </button>
+      </div>
+
+      {unassigned.length > 0 && (
+        <div>
+          <div className="sec-label" style={{ margin: "0 0 6px", padding: 0 }}>
+            Unassigned ({unassigned.length})
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {unassigned.map((p) => (
+              <div
+                key={p.id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                  padding: "4px 8px",
+                  background: "var(--bg-2, rgba(255,255,255,0.05))",
+                  border: "1px solid var(--border)",
+                  borderRadius: 6,
+                  fontSize: 12,
+                  color: "white",
+                }}
+              >
+                <span>{p.name}</span>
+                <select
+                  value=""
+                  onChange={(e) => assign(p.id, parseInt(e.target.value))}
+                  style={{
+                    background: "transparent",
+                    color: "var(--gold)",
+                    border: "none",
+                    fontSize: 11,
+                  }}
+                >
+                  <option value="">→ team</option>
+                  {teamBuckets.map((b, i) =>
+                    b.length < 2 ? (
+                      <option key={i} value={i} style={{ color: "black" }}>
+                        Team {i + 1}
+                      </option>
+                    ) : null,
+                  )}
+                </select>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {teamBuckets.map((ids, i) => (
+          <div
+            key={i}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "8px 10px",
+              border: "1px solid var(--border)",
+              borderRadius: 6,
+              background: ids.length === 2 ? "rgba(212,175,55,0.08)" : "transparent",
+            }}
+          >
+            <div style={{ color: "var(--gold)", fontWeight: 700, fontSize: 12, width: 56 }}>
+              Team {i + 1}
+            </div>
+            <div style={{ flex: 1, display: "flex", flexWrap: "wrap", gap: 4 }}>
+              {ids.length === 0 && (
+                <span style={{ color: "var(--muted)", fontSize: 12 }}>empty</span>
+              )}
+              {ids.map((pid) => (
+                <span
+                  key={pid}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 4,
+                    padding: "2px 6px",
+                    background: "rgba(255,255,255,0.06)",
+                    borderRadius: 4,
+                    fontSize: 12,
+                    color: "white",
+                  }}
+                >
+                  {playerName(pid)}
+                  <button
+                    onClick={() => assign(pid, undefined)}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "var(--muted)",
+                      cursor: "pointer",
+                      fontSize: 12,
+                      padding: 0,
+                    }}
+                    aria-label="remove"
+                  >
+                    ✕
+                  </button>
+                </span>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: "flex", gap: 6 }}>
+        <button className="btn btn-outline btn-sm" onClick={autoFill} style={{ flex: 1 }}>
+          ✨ Auto-fill rest
+        </button>
+        <button className="btn btn-outline btn-sm" onClick={() => setTeamOf({})} style={{ flex: 1 }}>
+          ♻ Clear
+        </button>
+        <button className="btn btn-gold btn-sm" onClick={start} style={{ flex: 1.4 }}>
+          🥇 Start
+        </button>
+      </div>
+    </div>
+  );
+}
+
 
 // ─────────────────────────────────────────────
 // TournamentView
