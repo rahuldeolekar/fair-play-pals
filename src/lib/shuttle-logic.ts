@@ -31,6 +31,43 @@ export type Match = {
   floater?: number; // legacy single floater
 };
 
+export type TournamentTeam = {
+  id: string;
+  name: string;
+  players: number[];
+};
+
+export type TournamentFixture = {
+  id: string;
+  teamA: string;
+  teamB: string;
+  scoreA: number | null;
+  scoreB: number | null;
+  completed: boolean;
+  round: "league" | "semi" | "final";
+  label?: string;
+};
+
+export type TournamentState = {
+  active: boolean;
+  stage: "league" | "semi" | "final" | "completed";
+  teams: TournamentTeam[];
+  fixtures: TournamentFixture[];
+};
+
+export type TournamentStanding = {
+  teamId: string;
+  name: string;
+  played: number;
+  won: number;
+  lost: number;
+  pointsFor: number;
+  pointsAgainst: number;
+  diff: number;
+  points: number;
+  form: Array<"W" | "L">;
+};
+
 export type AppState = {
   players: Player[];
   matches: Match[];
@@ -41,6 +78,7 @@ export type AppState = {
   courts: number;
   matchTarget: number;
   dayKey: string; // ISO date string for "today" — used to auto-reset gamesToday
+  tournament?: TournamentState;
 };
 
 export const todayKey = () => new Date().toISOString().slice(0, 10);
