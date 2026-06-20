@@ -415,7 +415,7 @@ function Leaderboard({ state, present }: { state: AppState; present: Player[] })
         <div className="font-display" style={{ fontSize: 22, fontWeight: 800, color: "white" }}>
           Live Rankings
         </div>
-        <div style={{ fontSize: 11, color: "var(--muted)" }}>Min. 3 games</div>
+        <div style={{ fontSize: 11, color: "var(--muted)" }}>Min. 3 games · fair-weighted</div>
       </div>
 
       <div
