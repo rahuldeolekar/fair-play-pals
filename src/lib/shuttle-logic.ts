@@ -220,3 +220,115 @@ export function rolloverDayIfNeeded(state: AppState): AppState {
     players: state.players.map((p) => ({ ...p, gamesToday: 0 })),
   };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tournament utilities
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function generateTournamentFixtures(teams: TournamentTeam[]): TournamentFixture[] {
+  const fixtures: TournamentFixture[] = [];
+  for (let i = 0; i < teams.length; i++) {
+    for (let j = i + 1; j < teams.length; j++) {
+      fixtures.push({
+        id: `L-${teams[i].id}-${teams[j].id}`,
+        teamA: teams[i].id,
+        teamB: teams[j].id,
+        scoreA: null,
+        scoreB: null,
+        completed: false,
+        round: "league",
+      });
+    }
+  }
+  return fixtures;
+}
+
+export function calculateTournamentTable(
+  teams: TournamentTeam[],
+  fixtures: TournamentFixture[],
+): TournamentStanding[] {
+  const map = new Map<string, TournamentStanding>();
+  for (const t of teams) {
+    map.set(t.id, {
+      teamId: t.id,
+      name: t.name,
+      played: 0,
+      won: 0,
+      lost: 0,
+      pointsFor: 0,
+      pointsAgainst: 0,
+      diff: 0,
+      points: 0,
+      form: [],
+    });
+  }
+  for (const f of fixtures) {
+    if (f.round !== "league" || !f.completed || f.scoreA == null || f.scoreB == null) continue;
+    const a = map.get(f.teamA);
+    const b = map.get(f.teamB);
+    if (!a || !b) continue;
+    a.played++; b.played++;
+    a.pointsFor += f.scoreA; a.pointsAgainst += f.scoreB;
+    b.pointsFor += f.scoreB; b.pointsAgainst += f.scoreA;
+    if (f.scoreA > f.scoreB) {
+      a.won++; a.points += 2; a.form.push("W");
+      b.lost++; b.form.push("L");
+    } else {
+      b.won++; b.points += 2; b.form.push("W");
+      a.lost++; a.form.push("L");
+    }
+  }
+  for (const s of map.values()) {
+    s.diff = s.pointsFor - s.pointsAgainst;
+    s.form = s.form.slice(-5);
+  }
+  return [...map.values()].sort(
+    (x, y) =>
+      y.points - x.points ||
+      y.diff - x.diff ||
+      y.pointsFor - x.pointsFor ||
+      x.name.localeCompare(y.name),
+  );
+}
+
+// Build knockout fixtures from league standings. Returns new fixtures to append.
+export function buildKnockoutFixtures(
+  standings: TournamentStanding[],
+): { fixtures: TournamentFixture[]; stage: "semi" | "final" } {
+  if (standings.length <= 4) {
+    // Final only: 1 vs 2
+    return {
+      stage: "final",
+      fixtures: [
+        {
+          id: "F-1",
+          teamA: standings[0].teamId,
+          teamB: standings[1].teamId,
+          scoreA: null,
+          scoreB: null,
+          completed: false,
+          round: "final",
+          label: "Final",
+        },
+      ],
+    };
+  }
+  // Semis: 1v4, 2v3, then final TBD
+  return {
+    stage: "semi",
+    fixtures: [
+      {
+        id: "SF-1",
+        teamA: standings[0].teamId,
+        teamB: standings[3].teamId,
+        scoreA: null, scoreB: null, completed: false, round: "semi", label: "SF1 · 1 vs 4",
+      },
+      {
+        id: "SF-2",
+        teamA: standings[1].teamId,
+        teamB: standings[2].teamId,
+        scoreA: null, scoreB: null, completed: false, round: "semi", label: "SF2 · 2 vs 3",
+      },
+    ],
+  };
+}
