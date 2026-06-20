@@ -222,7 +222,7 @@ function ShuttleScoreApp() {
 
       <div id="screens" className="screen">
         {nav === "board" && <Leaderboard state={state} present={present} />}
-        {nav === "courts" && <CourtsView state={state} />}
+        {nav === "courts" && <CourtsView state={state} isAdmin={isAdmin} onEdit={editScore} />}
         {nav === "tournament" && (
           <TournamentView state={state} isAdmin={isAdmin} commit={commit} showToast={showToast} />
         )}
