@@ -351,11 +351,12 @@ function BottomNav({
   setNav,
 }: {
   nav: string;
-  setNav: (n: "board" | "courts" | "history" | "admin") => void;
+  setNav: (n: "board" | "courts" | "tournament" | "history" | "admin") => void;
 }) {
-  const items: Array<{ k: "board" | "courts" | "history" | "admin"; icon: string; label: string }> = [
+  const items: Array<{ k: "board" | "courts" | "tournament" | "history" | "admin"; icon: string; label: string }> = [
     { k: "board", icon: "🏆", label: "Rankings" },
     { k: "courts", icon: "🏸", label: "Courts" },
+    { k: "tournament", icon: "🥇", label: "Tournament" },
     { k: "history", icon: "📜", label: "History" },
     { k: "admin", icon: "🔐", label: "Admin" },
   ];
