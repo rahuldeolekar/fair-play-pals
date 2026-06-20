@@ -1237,6 +1237,23 @@ function AdminPanel({
         </button>
       </div>
 
+      <div className="sec-label">Tournament</div>
+      <div style={{ margin: "0 16px", display: "flex", flexDirection: "column", gap: 8 }}>
+        <CreateTournamentButton state={state} commit={commit} showToast={showToast} />
+        {state.tournament?.active && (
+          <button
+            className="btn btn-outline"
+            style={{ width: "100%" }}
+            onClick={() => {
+              if (!confirm("End and clear the current tournament?")) return;
+              commit({ tournament: { active: false, stage: "completed", teams: [], fixtures: [] } });
+            }}
+          >
+            ✖ Clear Tournament
+          </button>
+        )}
+      </div>
+
       <ScoreSection state={state} onSubmit={submitScore} />
 
       <div className="sec-label">Add Player</div>
