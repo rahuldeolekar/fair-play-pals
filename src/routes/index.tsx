@@ -217,6 +217,9 @@ function ShuttleScoreApp() {
       <div id="screens" className="screen">
         {nav === "board" && <Leaderboard state={state} present={present} />}
         {nav === "courts" && <CourtsView state={state} />}
+        {nav === "tournament" && (
+          <TournamentView state={state} isAdmin={isAdmin} commit={commit} showToast={showToast} />
+        )}
         {nav === "history" && <HistoryView state={state} />}
         {nav === "admin" && (
           <AdminView
