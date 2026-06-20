@@ -13,6 +13,7 @@ import {
   buildKnockoutFixtures,
   buildBalancedTournamentTeams,
   applyMatchToPlayers,
+  revertMatchFromPlayers,
   type AppState,
   type Match,
   type Player,
