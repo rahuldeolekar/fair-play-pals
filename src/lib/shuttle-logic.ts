@@ -88,6 +88,17 @@ export function api(p: Player) {
   return (p.totalFor - p.totalAgainst) / p.gamesPlayed;
 }
 
+// Bayesian-shrunk ranking score used by the live leaderboard.
+// Shrinks small-sample players toward 0 so a regular's average is not
+// undercut by a casual's lucky hot streak (or one tournament).
+// K = 5 → players with ≥5 games are essentially unaffected;
+// players with 1-4 games get pulled slightly toward the mean.
+export const RANKING_SHRINKAGE = 5;
+export function rankingScore(p: Player) {
+  if (!p.gamesPlayed) return 0;
+  return (p.totalFor - p.totalAgainst) / Math.max(p.gamesPlayed, RANKING_SHRINKAGE);
+}
+
 // Fisher-Yates shuffle (true random for tiebreaks).
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -97,6 +108,7 @@ function shuffle<T>(arr: T[]): T[] {
   }
   return a;
 }
+
 
 // Anti-repeat penalty against last 20 matches.
 function matchupPenalty(pairA: number[], pairB: number[], history: Match[]) {
