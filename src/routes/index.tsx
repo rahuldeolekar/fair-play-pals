@@ -386,14 +386,15 @@ function BottomNav({
 // ─────────────────────────────────────────────
 function Leaderboard({ state, present }: { state: AppState; present: Player[] }) {
   const ranked = useMemo(
-    () => state.players.filter((p) => p.gamesPlayed >= 3).sort((a, b) => api(b) - api(a)),
+    () => state.players.filter((p) => p.gamesPlayed >= 3).sort((a, b) => rankingScore(b) - rankingScore(a)),
     [state.players],
   );
   const unranked = useMemo(
     () => state.players.filter((p) => p.gamesPlayed < 3).sort((a, b) => b.rating - a.rating),
     [state.players],
   );
-  const maxA = ranked.length ? Math.max(...ranked.map((p) => Math.abs(api(p))), 1) : 1;
+  const maxA = ranked.length ? Math.max(...ranked.map((p) => Math.abs(rankingScore(p))), 1) : 1;
+
 
   let best = { name: "—", streak: 0 };
   state.players.forEach((p) => {
