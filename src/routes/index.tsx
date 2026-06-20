@@ -2109,11 +2109,35 @@ function TournamentView({
     if (winner < target) return showToast(`⚠ Winning score must be at least ${target}.`);
     if (loser >= target - 1 && winner - loser < 2)
       return showToast(`⚠ At deuce, you need a 2-point lead (up to ${cap}).`);
+    // Guard against double-counting if an already-completed fixture is re-submitted.
+    const target_f = t.fixtures.find((f) => f.id === fid);
+    if (!target_f || target_f.completed) return;
     const fixtures = t.fixtures.map((f) =>
       f.id === fid ? { ...f, scoreA: sA, scoreB: sB, completed: true } : f,
     );
-    commit({ tournament: { ...t, fixtures } });
+    // Credit player stats so tournament results feed into Live Rankings.
+    // Per-game average normalisation keeps it fair for players who skip tournaments.
+    const teamAPlayers = t.teams.find((x) => x.id === target_f.teamA)?.players || [];
+    const teamBPlayers = t.teams.find((x) => x.id === target_f.teamB)?.players || [];
+    const players = applyMatchToPlayers(state.players, teamAPlayers, teamBPlayers, sA, sB);
+    // Also log the match into history so streaks/exports include tournament games.
+    const histMatch: Match = {
+      id: `tourn-${fid}-${Date.now()}`,
+      teamA: teamAPlayers,
+      teamB: teamBPlayers,
+      scoreA: sA,
+      scoreB: sB,
+      submitted: true,
+      type: "tournament",
+      date: new Date().toISOString(),
+    };
+    commit({
+      tournament: { ...t, fixtures },
+      players,
+      matches: [...state.matches, histMatch],
+    });
   };
+
 
   // Top picks
   const topCount = t.teams.length > 4 ? 4 : 2;
