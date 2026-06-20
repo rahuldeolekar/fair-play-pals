@@ -2252,6 +2252,50 @@ function TournamentView({
     });
   };
 
+  const editFixtureScore = (fid: string, sA: number, sB: number) => {
+    const target = state.matchTarget || 21;
+    const cap = target === 21 ? 30 : 20;
+    if (isNaN(sA) || isNaN(sB) || sA < 0 || sB < 0) return showToast("⚠ Enter valid scores.");
+    if (sA === sB) return showToast("⚠ Scores cannot be equal.");
+    if (sA > cap || sB > cap) return showToast(`⚠ Max score is ${cap}.`);
+    const winner = Math.max(sA, sB);
+    const loser = Math.min(sA, sB);
+    if (winner < target) return showToast(`⚠ Winning score must be at least ${target}.`);
+    if (loser >= target - 1 && winner - loser < 2)
+      return showToast(`⚠ At deuce, you need a 2-point lead (up to ${cap}).`);
+
+    const fx = t.fixtures.find((f) => f.id === fid);
+    if (!fx || !fx.completed) return;
+    if (fx.scoreA === sA && fx.scoreB === sB) return;
+
+    const teamAPlayers = t.teams.find((x) => x.id === fx.teamA)?.players || [];
+    const teamBPlayers = t.teams.find((x) => x.id === fx.teamB)?.players || [];
+
+    let players = revertMatchFromPlayers(
+      state.players,
+      teamAPlayers,
+      teamBPlayers,
+      fx.scoreA ?? 0,
+      fx.scoreB ?? 0,
+    );
+    players = applyMatchToPlayers(players, teamAPlayers, teamBPlayers, sA, sB);
+
+    const fixtures = t.fixtures.map((f) =>
+      f.id === fid ? { ...f, scoreA: sA, scoreB: sB } : f,
+    );
+
+    const matches = state.matches.map((m) =>
+      typeof m.id === "string" && m.id.startsWith(`tourn-${fid}-`)
+        ? { ...m, scoreA: sA, scoreB: sB }
+        : m,
+    );
+
+    commit({ tournament: { ...t, fixtures }, players, matches });
+    showToast("✓ Score updated");
+  };
+
+
+
 
   // Top picks
   const topCount = t.teams.length > 4 ? 4 : 2;
