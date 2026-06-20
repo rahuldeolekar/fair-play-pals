@@ -7,9 +7,15 @@ import {
   generateBalancedMatches,
   rolloverDayIfNeeded,
   todayKey,
+  generateTournamentFixtures,
+  calculateTournamentTable,
+  buildKnockoutFixtures,
   type AppState,
   type Match,
   type Player,
+  type TournamentState,
+  type TournamentFixture,
+  type TournamentStanding,
 } from "@/lib/shuttle-logic";
 import {
   getAppState,
@@ -100,7 +106,7 @@ function ShuttleScoreApp() {
   const changePw = useServerFn(updateAdminPassword);
 
   const [state, setState] = useState<AppState | null>(null);
-  const [nav, setNav] = useState<"board" | "courts" | "history" | "admin">("board");
+  const [nav, setNav] = useState<"board" | "courts" | "tournament" | "history" | "admin">("board");
   const [toast, setToast] = useState<string | null>(null);
   const [online, setOnline] = useState(false);
 
@@ -211,6 +217,9 @@ function ShuttleScoreApp() {
       <div id="screens" className="screen">
         {nav === "board" && <Leaderboard state={state} present={present} />}
         {nav === "courts" && <CourtsView state={state} />}
+        {nav === "tournament" && (
+          <TournamentView state={state} isAdmin={isAdmin} commit={commit} showToast={showToast} />
+        )}
         {nav === "history" && <HistoryView state={state} />}
         {nav === "admin" && (
           <AdminView
@@ -342,11 +351,12 @@ function BottomNav({
   setNav,
 }: {
   nav: string;
-  setNav: (n: "board" | "courts" | "history" | "admin") => void;
+  setNav: (n: "board" | "courts" | "tournament" | "history" | "admin") => void;
 }) {
-  const items: Array<{ k: "board" | "courts" | "history" | "admin"; icon: string; label: string }> = [
+  const items: Array<{ k: "board" | "courts" | "tournament" | "history" | "admin"; icon: string; label: string }> = [
     { k: "board", icon: "🏆", label: "Rankings" },
     { k: "courts", icon: "🏸", label: "Courts" },
+    { k: "tournament", icon: "🥇", label: "Tournament" },
     { k: "history", icon: "📜", label: "History" },
     { k: "admin", icon: "🔐", label: "Admin" },
   ];
@@ -1227,6 +1237,23 @@ function AdminPanel({
         </button>
       </div>
 
+      <div className="sec-label">Tournament</div>
+      <div style={{ margin: "0 16px", display: "flex", flexDirection: "column", gap: 8 }}>
+        <CreateTournamentButton state={state} commit={commit} showToast={showToast} />
+        {state.tournament?.active && (
+          <button
+            className="btn btn-outline"
+            style={{ width: "100%" }}
+            onClick={() => {
+              if (!confirm("End and clear the current tournament?")) return;
+              commit({ tournament: { active: false, stage: "completed", teams: [], fixtures: [] } });
+            }}
+          >
+            ✖ Clear Tournament
+          </button>
+        )}
+      </div>
+
       <ScoreSection state={state} onSubmit={submitScore} />
 
       <div className="sec-label">Add Player</div>
@@ -1692,6 +1719,482 @@ function Slot({
           })
         )}
       </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// Tournament: admin "Create from present" button
+// ─────────────────────────────────────────────
+function CreateTournamentButton({
+  state,
+  commit,
+  showToast,
+}: {
+  state: AppState;
+  commit: CommitFn;
+  showToast: (msg: string) => void;
+}) {
+  const present = state.players.filter((p) => p.present);
+  const onClick = () => {
+    if (present.length < 8) {
+      showToast("⚠ Need at least 8 present players.");
+      return;
+    }
+    if (present.length % 2 !== 0) {
+      showToast("⚠ Need an even number of present players.");
+      return;
+    }
+    if (state.tournament?.active) {
+      if (!confirm("A tournament is already active. Replace it?")) return;
+    }
+    // Pair players by rating: highest with lowest, etc. (snake pairing)
+    const sorted = [...present].sort((a, b) => b.rating - a.rating);
+    const teams: TournamentState["teams"] = [];
+    for (let i = 0; i < sorted.length / 2; i++) {
+      const top = sorted[i];
+      const bot = sorted[sorted.length - 1 - i];
+      teams.push({
+        id: `T${i + 1}`,
+        name: `${top.name.split(" ")[0]} & ${bot.name.split(" ")[0]}`,
+        players: [top.id, bot.id],
+      });
+    }
+    const fixtures = generateTournamentFixtures(teams);
+    const tournament: TournamentState = {
+      active: true,
+      stage: "league",
+      teams,
+      fixtures,
+    };
+    commit({ tournament, mode: "tournament" });
+    showToast(`🥇 Tournament created · ${teams.length} teams · ${fixtures.length} matches`);
+  };
+  return (
+    <button className="btn btn-gold" style={{ width: "100%" }} onClick={onClick}>
+      🥇 Create Tournament From Present Players ({present.length})
+    </button>
+  );
+}
+
+// ─────────────────────────────────────────────
+// TournamentView
+// ─────────────────────────────────────────────
+function TournamentView({
+  state,
+  isAdmin,
+  commit,
+  showToast,
+}: {
+  state: AppState;
+  isAdmin: boolean;
+  commit: CommitFn;
+  showToast: (msg: string) => void;
+}) {
+  const t = state.tournament;
+  if (!t || !t.active) {
+    return (
+      <div style={{ padding: 40, textAlign: "center", color: "var(--muted)" }}>
+        <div style={{ fontSize: 40, marginBottom: 8 }}>🥇</div>
+        <div style={{ fontSize: 16, fontWeight: 700, color: "white", marginBottom: 6 }}>
+          No tournament running
+        </div>
+        <div style={{ fontSize: 13 }}>
+          An admin can start one from the Admin tab → Tournament section.
+        </div>
+      </div>
+    );
+  }
+
+  const standings = useMemo(() => calculateTournamentTable(t.teams, t.fixtures), [t]);
+  const leagueFixtures = t.fixtures.filter((f) => f.round === "league");
+  const knockoutFixtures = t.fixtures.filter((f) => f.round !== "league");
+  const leaguePlayed = leagueFixtures.filter((f) => f.completed).length;
+  const leagueTotal = leagueFixtures.length;
+  const leagueDone = leaguePlayed === leagueTotal && leagueTotal > 0;
+
+  // Auto-create knockout fixtures when league completes.
+  useEffect(() => {
+    if (!isAdmin) return;
+    if (!leagueDone) return;
+    if (knockoutFixtures.length > 0) return;
+    const ko = buildKnockoutFixtures(standings);
+    const next: TournamentState = {
+      ...t,
+      stage: ko.stage,
+      fixtures: [...t.fixtures, ...ko.fixtures],
+    };
+    commit({ tournament: next }, { silent: true });
+    showToast(ko.stage === "final" ? "🏆 Final set!" : "🥈 Semi-finals set!");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leagueDone, knockoutFixtures.length, isAdmin]);
+
+  // Auto-create final after semis complete.
+  const semis = t.fixtures.filter((f) => f.round === "semi");
+  const semisDone = semis.length > 0 && semis.every((f) => f.completed);
+  const hasFinal = t.fixtures.some((f) => f.round === "final");
+  useEffect(() => {
+    if (!isAdmin) return;
+    if (!semisDone || hasFinal) return;
+    const winners = semis.map((s) =>
+      (s.scoreA ?? 0) > (s.scoreB ?? 0) ? s.teamA : s.teamB,
+    );
+    const finalFx: TournamentFixture = {
+      id: "F-1",
+      teamA: winners[0],
+      teamB: winners[1],
+      scoreA: null,
+      scoreB: null,
+      completed: false,
+      round: "final",
+      label: "Final",
+    };
+    commit(
+      { tournament: { ...t, stage: "final", fixtures: [...t.fixtures, finalFx] } },
+      { silent: true },
+    );
+    showToast("🏆 Final set!");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [semisDone, hasFinal, isAdmin]);
+
+  // Mark tournament completed when final is done.
+  const finalFx = t.fixtures.find((f) => f.round === "final");
+  useEffect(() => {
+    if (!isAdmin) return;
+    if (finalFx?.completed && t.stage !== "completed") {
+      commit({ tournament: { ...t, stage: "completed" } }, { silent: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [finalFx?.completed, t.stage, isAdmin]);
+
+  const teamName = (id: string) => t.teams.find((x) => x.id === id)?.name || "—";
+
+  const submitFixtureScore = (fid: string, sA: number, sB: number) => {
+    const target = state.matchTarget || 21;
+    const cap = target === 21 ? 30 : 20;
+    if (isNaN(sA) || isNaN(sB) || sA < 0 || sB < 0) return showToast("⚠ Enter valid scores.");
+    if (sA === sB) return showToast("⚠ Scores cannot be equal.");
+    if (sA > cap || sB > cap) return showToast(`⚠ Max score is ${cap}.`);
+    const winner = Math.max(sA, sB);
+    const loser = Math.min(sA, sB);
+    if (winner < target) return showToast(`⚠ Winning score must be at least ${target}.`);
+    if (loser >= target - 1 && winner - loser < 2)
+      return showToast(`⚠ At deuce, you need a 2-point lead (up to ${cap}).`);
+    const fixtures = t.fixtures.map((f) =>
+      f.id === fid ? { ...f, scoreA: sA, scoreB: sB, completed: true } : f,
+    );
+    commit({ tournament: { ...t, fixtures } });
+  };
+
+  // Top picks
+  const topCount = t.teams.length > 4 ? 4 : 2;
+
+  // Analytics
+  const completedAll = t.fixtures.filter((f) => f.completed);
+  const biggestWin = completedAll.reduce<{ diff: number; label: string } | null>((acc, f) => {
+    const d = Math.abs((f.scoreA ?? 0) - (f.scoreB ?? 0));
+    const s = `${teamName(f.teamA)} ${f.scoreA}–${f.scoreB} ${teamName(f.teamB)}`;
+    return !acc || d > acc.diff ? { diff: d, label: s } : acc;
+  }, null);
+  const closestMatch = completedAll.reduce<{ diff: number; label: string } | null>((acc, f) => {
+    const d = Math.abs((f.scoreA ?? 0) - (f.scoreB ?? 0));
+    const s = `${teamName(f.teamA)} ${f.scoreA}–${f.scoreB} ${teamName(f.teamB)}`;
+    return !acc || d < acc.diff ? { diff: d, label: s } : acc;
+  }, null);
+  const topAttack = standings.reduce<TournamentStanding | null>(
+    (a, s) => (!a || s.pointsFor > a.pointsFor ? s : a),
+    null,
+  );
+  const topDefence = standings.reduce<TournamentStanding | null>(
+    (a, s) => (!a || s.pointsAgainst < a.pointsAgainst ? s : a),
+    null,
+  );
+
+  return (
+    <div style={{ paddingBottom: 20 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "14px 16px 6px",
+        }}
+      >
+        <div className="font-display" style={{ fontSize: 22, fontWeight: 800, color: "white" }}>
+          Tournament
+        </div>
+        <span className="badge badge-tourn" style={{ textTransform: "capitalize" }}>
+          {t.stage}
+        </span>
+      </div>
+
+      <div
+        className="scroll-sec"
+        style={{ display: "flex", gap: 8, padding: "0 16px 12px" }}
+      >
+        <StatCard color="var(--gold)" value={t.teams.length} label="Teams" />
+        <StatCard color="var(--teal)" value={leaguePlayed} label="Played" />
+        <StatCard color="white" value={Math.max(leagueTotal - leaguePlayed, 0)} label="Remaining" />
+        <StatCard color="#f87171" value={completedAll.length} label="Total done" />
+      </div>
+
+      <div className="sec-label">
+        Standings · Top {topCount}
+      </div>
+      <div className="card" style={{ margin: "0 16px", overflow: "hidden" }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "20px 1fr 28px 28px 28px 40px 28px",
+            gap: 6,
+            padding: "8px 12px",
+            fontSize: 10,
+            color: "var(--muted)",
+            textTransform: "uppercase",
+            letterSpacing: "0.06em",
+            borderBottom: "1px solid var(--border)",
+          }}
+        >
+          <div>#</div>
+          <div>Team</div>
+          <div style={{ textAlign: "right" }}>P</div>
+          <div style={{ textAlign: "right" }}>W</div>
+          <div style={{ textAlign: "right" }}>L</div>
+          <div style={{ textAlign: "right" }}>+/−</div>
+          <div style={{ textAlign: "right" }}>Pts</div>
+        </div>
+        {standings.map((s, i) => {
+          const isTop = i < topCount;
+          return (
+            <div
+              key={s.teamId}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "20px 1fr 28px 28px 28px 40px 28px",
+                gap: 6,
+                padding: "10px 12px",
+                fontSize: 13,
+                color: "white",
+                background: isTop ? "rgba(212,175,55,0.08)" : "transparent",
+                borderBottom: "1px solid var(--border)",
+              }}
+            >
+              <div style={{ color: isTop ? "var(--gold)" : "var(--muted)", fontWeight: 700 }}>
+                {i + 1}
+              </div>
+              <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {s.name}
+                <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>
+                  Form: {s.form.length ? s.form.join(" ") : "—"}
+                </div>
+              </div>
+              <div style={{ textAlign: "right" }}>{s.played}</div>
+              <div style={{ textAlign: "right", color: "var(--green)" }}>{s.won}</div>
+              <div style={{ textAlign: "right", color: "var(--red)" }}>{s.lost}</div>
+              <div
+                style={{
+                  textAlign: "right",
+                  color: s.diff > 0 ? "var(--green)" : s.diff < 0 ? "var(--red)" : "var(--muted)",
+                }}
+              >
+                {s.diff > 0 ? "+" : ""}
+                {s.diff}
+              </div>
+              <div style={{ textAlign: "right", fontWeight: 700, color: "var(--gold)" }}>
+                {s.points}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="sec-label">League Fixtures</div>
+      <div style={{ margin: "0 16px", display: "flex", flexDirection: "column", gap: 8 }}>
+        {leagueFixtures.map((f) => (
+          <FixtureCard
+            key={f.id}
+            f={f}
+            teamName={teamName}
+            isAdmin={isAdmin}
+            target={state.matchTarget || 21}
+            onSubmit={submitFixtureScore}
+          />
+        ))}
+      </div>
+
+      {knockoutFixtures.length > 0 && (
+        <>
+          <div className="sec-label">Knockouts</div>
+          <div style={{ margin: "0 16px", display: "flex", flexDirection: "column", gap: 8 }}>
+            {knockoutFixtures.map((f) => (
+              <FixtureCard
+                key={f.id}
+                f={f}
+                teamName={teamName}
+                isAdmin={isAdmin}
+                target={state.matchTarget || 21}
+                onSubmit={submitFixtureScore}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      {!leagueDone && t.teams.length > 4 && (
+        <div className="sec-label">Knockouts</div>
+      )}
+      {!leagueDone && t.teams.length > 4 && knockoutFixtures.length === 0 && (
+        <div
+          className="card"
+          style={{
+            margin: "0 16px",
+            padding: 14,
+            fontSize: 12,
+            color: "var(--muted)",
+          }}
+        >
+          Semi-Finals & Final — <em>To Be Determined</em> when league stage completes.
+        </div>
+      )}
+
+      <div className="sec-label">Analytics</div>
+      <div style={{ margin: "0 16px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        <MiniStat
+          title="🔥 Top Attack"
+          value={topAttack ? topAttack.name : "—"}
+          sub={topAttack ? `${topAttack.pointsFor} pts for` : ""}
+        />
+        <MiniStat
+          title="🛡 Best Defence"
+          value={topDefence && topDefence.played ? topDefence.name : "—"}
+          sub={topDefence && topDefence.played ? `${topDefence.pointsAgainst} pts against` : ""}
+        />
+        <MiniStat
+          title="💥 Biggest Win"
+          value={biggestWin ? `+${biggestWin.diff}` : "—"}
+          sub={biggestWin?.label || ""}
+        />
+        <MiniStat
+          title="🤏 Closest Match"
+          value={closestMatch ? `${closestMatch.diff} pt` : "—"}
+          sub={closestMatch?.label || ""}
+        />
+      </div>
+    </div>
+  );
+}
+
+function FixtureCard({
+  f,
+  teamName,
+  isAdmin,
+  target,
+  onSubmit,
+}: {
+  f: TournamentFixture;
+  teamName: (id: string) => string;
+  isAdmin: boolean;
+  target: number;
+  onSubmit: (fid: string, sA: number, sB: number) => void;
+}) {
+  const [a, setA] = useState("");
+  const [b, setB] = useState("");
+  const winner =
+    f.completed && f.scoreA != null && f.scoreB != null
+      ? f.scoreA > f.scoreB
+        ? "A"
+        : "B"
+      : null;
+  return (
+    <div className="card" style={{ padding: "12px 14px" }}>
+      <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+        {f.label || f.round} {f.completed && "· Final"}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div
+          style={{
+            flex: 1,
+            fontSize: 14,
+            fontWeight: 600,
+            color: winner === "A" ? "var(--gold)" : "white",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {teamName(f.teamA)}
+        </div>
+        {f.completed ? (
+          <div style={{ fontWeight: 800, fontSize: 16, color: "white" }}>
+            {f.scoreA} – {f.scoreB}
+          </div>
+        ) : isAdmin ? (
+          <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+            <input
+              className="inp"
+              inputMode="numeric"
+              style={{ width: 44, textAlign: "center", padding: "6px 4px" }}
+              value={a}
+              onChange={(e) => setA(e.target.value)}
+            />
+            <span style={{ color: "var(--muted)" }}>–</span>
+            <input
+              className="inp"
+              inputMode="numeric"
+              style={{ width: 44, textAlign: "center", padding: "6px 4px" }}
+              value={b}
+              onChange={(e) => setB(e.target.value)}
+            />
+          </div>
+        ) : (
+          <div style={{ color: "var(--muted)", fontSize: 12 }}>vs</div>
+        )}
+        <div
+          style={{
+            flex: 1,
+            fontSize: 14,
+            fontWeight: 600,
+            color: winner === "B" ? "var(--gold)" : "white",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            textAlign: "right",
+          }}
+        >
+          {teamName(f.teamB)}
+        </div>
+      </div>
+      {!f.completed && isAdmin && (
+        <button
+          className="btn btn-gold btn-sm"
+          style={{ width: "100%", marginTop: 10 }}
+          onClick={() => {
+            onSubmit(f.id, parseInt(a), parseInt(b));
+            setA("");
+            setB("");
+          }}
+        >
+          Save Score (target {target})
+        </button>
+      )}
+    </div>
+  );
+}
+
+function MiniStat({ title, value, sub }: { title: string; value: string | number; sub?: string }) {
+  return (
+    <div className="card" style={{ padding: "10px 12px" }}>
+      <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+        {title}
+      </div>
+      <div style={{ fontSize: 14, fontWeight: 700, color: "white", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {value}
+      </div>
+      {sub && (
+        <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {sub}
+        </div>
+      )}
     </div>
   );
 }
