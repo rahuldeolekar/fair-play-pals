@@ -4,19 +4,24 @@ import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import {
   api,
+  rankingScore,
   generateBalancedMatches,
   rolloverDayIfNeeded,
   todayKey,
   generateTournamentFixtures,
   calculateTournamentTable,
   buildKnockoutFixtures,
+  buildBalancedTournamentTeams,
+  applyMatchToPlayers,
   type AppState,
   type Match,
   type Player,
   type TournamentState,
+  type TournamentTeam,
   type TournamentFixture,
   type TournamentStanding,
 } from "@/lib/shuttle-logic";
+
 import {
   getAppState,
   updateAppState,
