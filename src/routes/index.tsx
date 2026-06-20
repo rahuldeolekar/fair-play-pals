@@ -2503,21 +2503,31 @@ function FixtureCard({
   isAdmin,
   target,
   onSubmit,
+  onEdit,
 }: {
   f: TournamentFixture;
   teamName: (id: string) => string;
   isAdmin: boolean;
   target: number;
   onSubmit: (fid: string, sA: number, sB: number) => void;
+  onEdit: (fid: string, sA: number, sB: number) => void;
 }) {
   const [a, setA] = useState("");
   const [b, setB] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [eA, setEA] = useState("");
+  const [eB, setEB] = useState("");
   const winner =
     f.completed && f.scoreA != null && f.scoreB != null
       ? f.scoreA > f.scoreB
         ? "A"
         : "B"
       : null;
+  const startEdit = () => {
+    setEA(String(f.scoreA ?? ""));
+    setEB(String(f.scoreB ?? ""));
+    setEditing(true);
+  };
   return (
     <div className="card" style={{ padding: "12px 14px" }}>
       <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.06em" }}>
@@ -2537,9 +2547,27 @@ function FixtureCard({
         >
           {teamName(f.teamA)}
         </div>
-        {f.completed ? (
+        {f.completed && !editing ? (
           <div style={{ fontWeight: 800, fontSize: 16, color: "white" }}>
             {f.scoreA} – {f.scoreB}
+          </div>
+        ) : f.completed && editing ? (
+          <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+            <input
+              className="inp"
+              inputMode="numeric"
+              style={{ width: 44, textAlign: "center", padding: "6px 4px" }}
+              value={eA}
+              onChange={(e) => setEA(e.target.value)}
+            />
+            <span style={{ color: "var(--muted)" }}>–</span>
+            <input
+              className="inp"
+              inputMode="numeric"
+              style={{ width: 44, textAlign: "center", padding: "6px 4px" }}
+              value={eB}
+              onChange={(e) => setEB(e.target.value)}
+            />
           </div>
         ) : isAdmin ? (
           <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
@@ -2589,6 +2617,30 @@ function FixtureCard({
         >
           Save Score (target {target})
         </button>
+      )}
+      {f.completed && isAdmin && (
+        <div style={{ display: "flex", gap: 6, marginTop: 10, justifyContent: "flex-end" }}>
+          {editing ? (
+            <>
+              <button className="btn btn-outline btn-sm" onClick={() => setEditing(false)}>
+                Cancel
+              </button>
+              <button
+                className="btn btn-gold btn-sm"
+                onClick={() => {
+                  onEdit(f.id, parseInt(eA), parseInt(eB));
+                  setEditing(false);
+                }}
+              >
+                Save (target {target})
+              </button>
+            </>
+          ) : (
+            <button className="btn btn-outline btn-sm" onClick={startEdit}>
+              ✎ Edit score
+            </button>
+          )}
+        </div>
       )}
     </div>
   );
