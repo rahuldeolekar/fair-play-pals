@@ -699,58 +699,16 @@ function CourtsView({
             {done.length > 0 && (
               <>
                 <SectionLabel color="var(--muted)">✓ Completed</SectionLabel>
-                {done.map((m) => {
-                  const tA = m.teamA.map(byId).filter(Boolean) as Player[];
-                  const tB = m.teamB.map(byId).filter(Boolean) as Player[];
-                  const wA = (m.scoreA ?? 0) > (m.scoreB ?? 0);
-                  return (
-                    <div
-                      key={m.id}
-                      className="card"
-                      style={{ marginBottom: 8, padding: "10px 14px" }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 8,
-                          fontSize: 13,
-                        }}
-                      >
-                        <div
-                          style={{
-                            flex: 1,
-                            fontWeight: wA ? 600 : undefined,
-                            color: wA ? "white" : "var(--muted)",
-                          }}
-                        >
-                          {tA.map((p) => p.name).join(" & ")}
-                        </div>
-                        <div
-                          className="font-display"
-                          style={{
-                            fontSize: 18,
-                            fontWeight: 700,
-                            color: "white",
-                            flexShrink: 0,
-                          }}
-                        >
-                          {m.scoreA}–{m.scoreB}
-                        </div>
-                        <div
-                          style={{
-                            flex: 1,
-                            textAlign: "right",
-                            fontWeight: !wA ? 600 : undefined,
-                            color: !wA ? "white" : "var(--muted)",
-                          }}
-                        >
-                          {tB.map((p) => p.name).join(" & ")}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                {done.map((m) => (
+                  <CompletedMatchCard
+                    key={m.id}
+                    m={m}
+                    byId={byId}
+                    isAdmin={isAdmin}
+                    target={state.matchTarget || 21}
+                    onEdit={onEdit}
+                  />
+                ))}
               </>
             )}
           </>
