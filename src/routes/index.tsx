@@ -13,6 +13,7 @@ import {
   buildKnockoutFixtures,
   buildBalancedTournamentTeams,
   applyMatchToPlayers,
+  revertMatchFromPlayers,
   type AppState,
   type Match,
   type Player,
@@ -200,6 +201,48 @@ function ShuttleScoreApp() {
     }
   };
 
+  const editScore = (mid: number | string, sA: number, sB: number) => {
+    if (!state) return;
+    const target = state.matchTarget || 21;
+    const cap = target === 21 ? 30 : 20;
+    if (isNaN(sA) || isNaN(sB) || sA < 0 || sB < 0) return showToast("⚠ Enter valid scores.");
+    if (sA === sB) return showToast("⚠ Scores cannot be equal.");
+    if (sA > cap || sB > cap) return showToast(`⚠ Max score is ${cap}.`);
+    const winner = Math.max(sA, sB);
+    const loser = Math.min(sA, sB);
+    if (winner < target) return showToast(`⚠ Winning score must be at least ${target}.`);
+    if (loser >= target - 1 && winner - loser < 2)
+      return showToast(`⚠ At deuce, you need a 2-point lead (up to ${cap}).`);
+
+    const histIdx = state.matches.findIndex((m) => m.id === mid);
+    const curIdx = state.currentMatches.findIndex((m) => m.id === mid);
+    const prev =
+      histIdx >= 0 ? state.matches[histIdx] : curIdx >= 0 ? state.currentMatches[curIdx] : null;
+    if (!prev || !prev.submitted) return showToast("⚠ Match not found.");
+    if (prev.scoreA === sA && prev.scoreB === sB) return;
+
+    let players = revertMatchFromPlayers(
+      state.players,
+      prev.teamA,
+      prev.teamB,
+      prev.scoreA ?? 0,
+      prev.scoreB ?? 0,
+    );
+    players = applyMatchToPlayers(players, prev.teamA, prev.teamB, sA, sB);
+
+    const updated: Match = { ...prev, scoreA: sA, scoreB: sB, date: new Date().toISOString() };
+    const matches =
+      histIdx >= 0 ? state.matches.map((m, i) => (i === histIdx ? updated : m)) : state.matches;
+    const currentMatches =
+      curIdx >= 0
+        ? state.currentMatches.map((m, i) => (i === curIdx ? updated : m))
+        : state.currentMatches;
+
+    commit({ matches, currentMatches, players });
+    showToast("✓ Score updated");
+  };
+
+
   if (!state) {
     return (
       <div style={{ padding: 40, textAlign: "center", color: "var(--muted)" }}>
@@ -221,7 +264,7 @@ function ShuttleScoreApp() {
 
       <div id="screens" className="screen">
         {nav === "board" && <Leaderboard state={state} present={present} />}
-        {nav === "courts" && <CourtsView state={state} />}
+        {nav === "courts" && <CourtsView state={state} isAdmin={isAdmin} onEdit={editScore} />}
         {nav === "tournament" && (
           <TournamentView state={state} isAdmin={isAdmin} commit={commit} showToast={showToast} />
         )}
@@ -563,7 +606,15 @@ function StatCard({
 // ─────────────────────────────────────────────
 // Courts view
 // ─────────────────────────────────────────────
-function CourtsView({ state }: { state: AppState }) {
+function CourtsView({
+  state,
+  isAdmin,
+  onEdit,
+}: {
+  state: AppState;
+  isAdmin: boolean;
+  onEdit: (mid: number | string, sA: number, sB: number) => void;
+}) {
   const byId = (id: number) => state.players.find((p) => p.id === id);
   const courts = state.courts || 2;
 
@@ -648,63 +699,124 @@ function CourtsView({ state }: { state: AppState }) {
             {done.length > 0 && (
               <>
                 <SectionLabel color="var(--muted)">✓ Completed</SectionLabel>
-                {done.map((m) => {
-                  const tA = m.teamA.map(byId).filter(Boolean) as Player[];
-                  const tB = m.teamB.map(byId).filter(Boolean) as Player[];
-                  const wA = (m.scoreA ?? 0) > (m.scoreB ?? 0);
-                  return (
-                    <div
-                      key={m.id}
-                      className="card"
-                      style={{ marginBottom: 8, padding: "10px 14px" }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 8,
-                          fontSize: 13,
-                        }}
-                      >
-                        <div
-                          style={{
-                            flex: 1,
-                            fontWeight: wA ? 600 : undefined,
-                            color: wA ? "white" : "var(--muted)",
-                          }}
-                        >
-                          {tA.map((p) => p.name).join(" & ")}
-                        </div>
-                        <div
-                          className="font-display"
-                          style={{
-                            fontSize: 18,
-                            fontWeight: 700,
-                            color: "white",
-                            flexShrink: 0,
-                          }}
-                        >
-                          {m.scoreA}–{m.scoreB}
-                        </div>
-                        <div
-                          style={{
-                            flex: 1,
-                            textAlign: "right",
-                            fontWeight: !wA ? 600 : undefined,
-                            color: !wA ? "white" : "var(--muted)",
-                          }}
-                        >
-                          {tB.map((p) => p.name).join(" & ")}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                {done.map((m) => (
+                  <CompletedMatchCard
+                    key={m.id}
+                    m={m}
+                    byId={byId}
+                    isAdmin={isAdmin}
+                    target={state.matchTarget || 21}
+                    onEdit={onEdit}
+                  />
+                ))}
               </>
             )}
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+function CompletedMatchCard({
+  m,
+  byId,
+  isAdmin,
+  target,
+  onEdit,
+}: {
+  m: Match;
+  byId: (id: number) => Player | undefined;
+  isAdmin: boolean;
+  target: number;
+  onEdit: (mid: number | string, sA: number, sB: number) => void;
+}) {
+  const tA = m.teamA.map(byId).filter(Boolean) as Player[];
+  const tB = m.teamB.map(byId).filter(Boolean) as Player[];
+  const wA = (m.scoreA ?? 0) > (m.scoreB ?? 0);
+  const [editing, setEditing] = useState(false);
+  const [a, setA] = useState(String(m.scoreA ?? ""));
+  const [b, setB] = useState(String(m.scoreB ?? ""));
+  return (
+    <div className="card" style={{ marginBottom: 8, padding: "10px 14px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+        <div
+          style={{
+            flex: 1,
+            fontWeight: wA ? 600 : undefined,
+            color: wA ? "white" : "var(--muted)",
+          }}
+        >
+          {tA.map((p) => p.name).join(" & ")}
+        </div>
+        {editing ? (
+          <div style={{ display: "flex", gap: 4, alignItems: "center", flexShrink: 0 }}>
+            <input
+              className="inp"
+              inputMode="numeric"
+              style={{ width: 44, textAlign: "center", padding: "6px 4px" }}
+              value={a}
+              onChange={(e) => setA(e.target.value)}
+            />
+            <span style={{ color: "var(--muted)" }}>–</span>
+            <input
+              className="inp"
+              inputMode="numeric"
+              style={{ width: 44, textAlign: "center", padding: "6px 4px" }}
+              value={b}
+              onChange={(e) => setB(e.target.value)}
+            />
+          </div>
+        ) : (
+          <div
+            className="font-display"
+            style={{ fontSize: 18, fontWeight: 700, color: "white", flexShrink: 0 }}
+          >
+            {m.scoreA}–{m.scoreB}
+          </div>
+        )}
+        <div
+          style={{
+            flex: 1,
+            textAlign: "right",
+            fontWeight: !wA ? 600 : undefined,
+            color: !wA ? "white" : "var(--muted)",
+          }}
+        >
+          {tB.map((p) => p.name).join(" & ")}
+        </div>
+      </div>
+      {isAdmin && (
+        <div style={{ display: "flex", gap: 6, marginTop: 8, justifyContent: "flex-end" }}>
+          {editing ? (
+            <>
+              <button
+                className="btn btn-outline btn-sm"
+                onClick={() => {
+                  setA(String(m.scoreA ?? ""));
+                  setB(String(m.scoreB ?? ""));
+                  setEditing(false);
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-gold btn-sm"
+                onClick={() => {
+                  onEdit(m.id, parseInt(a), parseInt(b));
+                  setEditing(false);
+                }}
+              >
+                Save (target {target})
+              </button>
+            </>
+          ) : (
+            <button className="btn btn-outline btn-sm" onClick={() => setEditing(true)}>
+              ✎ Edit score
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -1073,6 +1185,8 @@ function AdminPanel({
 
     commit({ currentMatches, matches, players });
   };
+
+
 
   const addPlayer = (name: string, tier: 0 | 1 | 2, rating: number) => {
     if (!name.trim()) return showToast("⚠ Enter a name.");
@@ -2138,6 +2252,50 @@ function TournamentView({
     });
   };
 
+  const editFixtureScore = (fid: string, sA: number, sB: number) => {
+    const target = state.matchTarget || 21;
+    const cap = target === 21 ? 30 : 20;
+    if (isNaN(sA) || isNaN(sB) || sA < 0 || sB < 0) return showToast("⚠ Enter valid scores.");
+    if (sA === sB) return showToast("⚠ Scores cannot be equal.");
+    if (sA > cap || sB > cap) return showToast(`⚠ Max score is ${cap}.`);
+    const winner = Math.max(sA, sB);
+    const loser = Math.min(sA, sB);
+    if (winner < target) return showToast(`⚠ Winning score must be at least ${target}.`);
+    if (loser >= target - 1 && winner - loser < 2)
+      return showToast(`⚠ At deuce, you need a 2-point lead (up to ${cap}).`);
+
+    const fx = t.fixtures.find((f) => f.id === fid);
+    if (!fx || !fx.completed) return;
+    if (fx.scoreA === sA && fx.scoreB === sB) return;
+
+    const teamAPlayers = t.teams.find((x) => x.id === fx.teamA)?.players || [];
+    const teamBPlayers = t.teams.find((x) => x.id === fx.teamB)?.players || [];
+
+    let players = revertMatchFromPlayers(
+      state.players,
+      teamAPlayers,
+      teamBPlayers,
+      fx.scoreA ?? 0,
+      fx.scoreB ?? 0,
+    );
+    players = applyMatchToPlayers(players, teamAPlayers, teamBPlayers, sA, sB);
+
+    const fixtures = t.fixtures.map((f) =>
+      f.id === fid ? { ...f, scoreA: sA, scoreB: sB } : f,
+    );
+
+    const matches = state.matches.map((m) =>
+      typeof m.id === "string" && m.id.startsWith(`tourn-${fid}-`)
+        ? { ...m, scoreA: sA, scoreB: sB }
+        : m,
+    );
+
+    commit({ tournament: { ...t, fixtures }, players, matches });
+    showToast("✓ Score updated");
+  };
+
+
+
 
   // Top picks
   const topCount = t.teams.length > 4 ? 4 : 2;
@@ -2271,6 +2429,7 @@ function TournamentView({
             isAdmin={isAdmin}
             target={state.matchTarget || 21}
             onSubmit={submitFixtureScore}
+            onEdit={editFixtureScore}
           />
         ))}
       </div>
@@ -2287,6 +2446,7 @@ function TournamentView({
                 isAdmin={isAdmin}
                 target={state.matchTarget || 21}
                 onSubmit={submitFixtureScore}
+                onEdit={editFixtureScore}
               />
             ))}
           </div>
@@ -2343,21 +2503,31 @@ function FixtureCard({
   isAdmin,
   target,
   onSubmit,
+  onEdit,
 }: {
   f: TournamentFixture;
   teamName: (id: string) => string;
   isAdmin: boolean;
   target: number;
   onSubmit: (fid: string, sA: number, sB: number) => void;
+  onEdit: (fid: string, sA: number, sB: number) => void;
 }) {
   const [a, setA] = useState("");
   const [b, setB] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [eA, setEA] = useState("");
+  const [eB, setEB] = useState("");
   const winner =
     f.completed && f.scoreA != null && f.scoreB != null
       ? f.scoreA > f.scoreB
         ? "A"
         : "B"
       : null;
+  const startEdit = () => {
+    setEA(String(f.scoreA ?? ""));
+    setEB(String(f.scoreB ?? ""));
+    setEditing(true);
+  };
   return (
     <div className="card" style={{ padding: "12px 14px" }}>
       <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.06em" }}>
@@ -2377,9 +2547,27 @@ function FixtureCard({
         >
           {teamName(f.teamA)}
         </div>
-        {f.completed ? (
+        {f.completed && !editing ? (
           <div style={{ fontWeight: 800, fontSize: 16, color: "white" }}>
             {f.scoreA} – {f.scoreB}
+          </div>
+        ) : f.completed && editing ? (
+          <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+            <input
+              className="inp"
+              inputMode="numeric"
+              style={{ width: 44, textAlign: "center", padding: "6px 4px" }}
+              value={eA}
+              onChange={(e) => setEA(e.target.value)}
+            />
+            <span style={{ color: "var(--muted)" }}>–</span>
+            <input
+              className="inp"
+              inputMode="numeric"
+              style={{ width: 44, textAlign: "center", padding: "6px 4px" }}
+              value={eB}
+              onChange={(e) => setEB(e.target.value)}
+            />
           </div>
         ) : isAdmin ? (
           <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
@@ -2429,6 +2617,30 @@ function FixtureCard({
         >
           Save Score (target {target})
         </button>
+      )}
+      {f.completed && isAdmin && (
+        <div style={{ display: "flex", gap: 6, marginTop: 10, justifyContent: "flex-end" }}>
+          {editing ? (
+            <>
+              <button className="btn btn-outline btn-sm" onClick={() => setEditing(false)}>
+                Cancel
+              </button>
+              <button
+                className="btn btn-gold btn-sm"
+                onClick={() => {
+                  onEdit(f.id, parseInt(eA), parseInt(eB));
+                  setEditing(false);
+                }}
+              >
+                Save (target {target})
+              </button>
+            </>
+          ) : (
+            <button className="btn btn-outline btn-sm" onClick={startEdit}>
+              ✎ Edit score
+            </button>
+          )}
+        </div>
       )}
     </div>
   );
