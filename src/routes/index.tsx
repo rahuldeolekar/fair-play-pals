@@ -1247,6 +1247,7 @@ function AdminPanel({
       <div className="sec-label">Tournament</div>
       <div style={{ margin: "0 16px", display: "flex", flexDirection: "column", gap: 8 }}>
         <CreateTournamentButton state={state} commit={commit} showToast={showToast} />
+        <CustomTournamentBuilder state={state} commit={commit} showToast={showToast} />
         {state.tournament?.active && (
           <button
             className="btn btn-outline"
@@ -1260,6 +1261,7 @@ function AdminPanel({
           </button>
         )}
       </div>
+
 
       <ScoreSection state={state} onSubmit={submitScore} />
 
