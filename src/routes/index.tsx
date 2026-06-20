@@ -718,6 +718,109 @@ function CourtsView({
   );
 }
 
+function CompletedMatchCard({
+  m,
+  byId,
+  isAdmin,
+  target,
+  onEdit,
+}: {
+  m: Match;
+  byId: (id: number) => Player | undefined;
+  isAdmin: boolean;
+  target: number;
+  onEdit: (mid: number | string, sA: number, sB: number) => void;
+}) {
+  const tA = m.teamA.map(byId).filter(Boolean) as Player[];
+  const tB = m.teamB.map(byId).filter(Boolean) as Player[];
+  const wA = (m.scoreA ?? 0) > (m.scoreB ?? 0);
+  const [editing, setEditing] = useState(false);
+  const [a, setA] = useState(String(m.scoreA ?? ""));
+  const [b, setB] = useState(String(m.scoreB ?? ""));
+  return (
+    <div className="card" style={{ marginBottom: 8, padding: "10px 14px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+        <div
+          style={{
+            flex: 1,
+            fontWeight: wA ? 600 : undefined,
+            color: wA ? "white" : "var(--muted)",
+          }}
+        >
+          {tA.map((p) => p.name).join(" & ")}
+        </div>
+        {editing ? (
+          <div style={{ display: "flex", gap: 4, alignItems: "center", flexShrink: 0 }}>
+            <input
+              className="inp"
+              inputMode="numeric"
+              style={{ width: 44, textAlign: "center", padding: "6px 4px" }}
+              value={a}
+              onChange={(e) => setA(e.target.value)}
+            />
+            <span style={{ color: "var(--muted)" }}>–</span>
+            <input
+              className="inp"
+              inputMode="numeric"
+              style={{ width: 44, textAlign: "center", padding: "6px 4px" }}
+              value={b}
+              onChange={(e) => setB(e.target.value)}
+            />
+          </div>
+        ) : (
+          <div
+            className="font-display"
+            style={{ fontSize: 18, fontWeight: 700, color: "white", flexShrink: 0 }}
+          >
+            {m.scoreA}–{m.scoreB}
+          </div>
+        )}
+        <div
+          style={{
+            flex: 1,
+            textAlign: "right",
+            fontWeight: !wA ? 600 : undefined,
+            color: !wA ? "white" : "var(--muted)",
+          }}
+        >
+          {tB.map((p) => p.name).join(" & ")}
+        </div>
+      </div>
+      {isAdmin && (
+        <div style={{ display: "flex", gap: 6, marginTop: 8, justifyContent: "flex-end" }}>
+          {editing ? (
+            <>
+              <button
+                className="btn btn-outline btn-sm"
+                onClick={() => {
+                  setA(String(m.scoreA ?? ""));
+                  setB(String(m.scoreB ?? ""));
+                  setEditing(false);
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-gold btn-sm"
+                onClick={() => {
+                  onEdit(m.id, parseInt(a), parseInt(b));
+                  setEditing(false);
+                }}
+              >
+                Save (target {target})
+              </button>
+            </>
+          ) : (
+            <button className="btn btn-outline btn-sm" onClick={() => setEditing(true)}>
+              ✎ Edit score
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SectionLabel({ color, children }: { color: string; children: React.ReactNode }) {
   return (
     <div
