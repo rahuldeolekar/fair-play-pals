@@ -185,10 +185,20 @@ function ShuttleScoreApp() {
     }
     try {
       const merged = rolloverDayIfNeeded({ ...state, ...patch } as AppState);
+      // ── DERIVE-FROM-MATCHES ──────────────────────────────────────────────
+      // Player stats (gamesPlayed / totalFor / totalAgainst) are NEVER
+      // incremented in place. On every write we recompute them from the
+      // canonical matches[] array, so the leaderboard is always a pure
+      // projection of current match results. Editing a score → matches[]
+      // is updated → commit() re-derives → rankings refresh automatically.
+      const finalMatches = patch.matches ?? merged.matches;
+      const basePlayers = patch.players ?? merged.players;
+      const derivedPlayers = derivePlayerStats(basePlayers, finalMatches);
       const finalPatch: Partial<AppState> = {
         ...patch,
         dayKey: merged.dayKey,
-        players: patch.players ?? merged.players,
+        matches: finalMatches,
+        players: derivedPlayers,
       };
       await writeState({ data: { token: adminToken, patch: finalPatch } });
       if (!opts.silent) showToast("✅ Saved");
