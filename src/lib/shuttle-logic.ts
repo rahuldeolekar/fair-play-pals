@@ -404,6 +404,9 @@ export function applyMatchToPlayers(
 }
 
 // Reverse a previously-applied match result. Used when editing/correcting a submitted score.
+// NOTE: With the derive-from-matches model below this is no longer the canonical path —
+// commit() recomputes stats from the matches array on every write. Kept for backwards
+// compatibility with any callers that still want incremental updates.
 export function revertMatchFromPlayers(
   players: Player[],
   teamA: number[],
@@ -431,5 +434,54 @@ export function revertMatchFromPlayers(
       };
     }
     return p;
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DERIVED LEADERBOARD STATS (single source of truth = the matches array)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Every player's gamesPlayed / totalFor / totalAgainst is recomputed from the
+// full matches history on every write. This makes the leaderboard a pure
+// projection of match results — editing a single score automatically forces
+// the entire league table to re-derive, so corrections can never accumulate
+// or double-count.
+//
+// All other player fields (name, tier, rating, present, gamesToday, etc.)
+// are preserved as-is.
+export function derivePlayerStats(players: Player[], matches: Match[]): Player[] {
+  const stats = new Map<number, { gp: number; tf: number; ta: number }>();
+  for (const p of players) stats.set(p.id, { gp: 0, tf: 0, ta: 0 });
+
+  for (const m of matches) {
+    if (!m || !m.submitted) continue;
+    if (m.scoreA == null || m.scoreB == null) continue;
+    if (m.type === "floater") continue; // bench rows never count
+    const sA = m.scoreA;
+    const sB = m.scoreB;
+    for (const id of m.teamA || []) {
+      const s = stats.get(id);
+      if (!s) continue;
+      s.gp += 1;
+      s.tf += sA;
+      s.ta += sB;
+    }
+    for (const id of m.teamB || []) {
+      const s = stats.get(id);
+      if (!s) continue;
+      s.gp += 1;
+      s.tf += sB;
+      s.ta += sA;
+    }
+  }
+
+  return players.map((p) => {
+    const s = stats.get(p.id) || { gp: 0, tf: 0, ta: 0 };
+    return {
+      ...p,
+      gamesPlayed: s.gp,
+      totalFor: s.tf,
+      totalAgainst: s.ta,
+    };
   });
 }
